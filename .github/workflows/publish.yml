@@ -13,7 +13,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-${{ github.ref }}
+  group: publish-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -25,10 +25,53 @@ jobs:
       url: https://pypi.org/project/harlequin-chdb/
 
     steps:
-      - name: Checkout at tag
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        id: release
+        run: |
+          set -euo pipefail
+
+          if [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+
+          case "$TAG" in
+            v[0-9]*)
+              ;;
+            *)
+              echo "::error::Release tag must start with 'v' followed by a version, got '$TAG'."
+              exit 1
+              ;;
+          esac
+
+          case "$TAG" in
+            *[!A-Za-z0-9._-]*)
+              echo "::error::Release tag '$TAG' contains unsupported characters."
+              exit 1
+              ;;
+          esac
+
+          git fetch --force --tags origin "refs/tags/${TAG}:refs/tags/${TAG}"
+          SHA="$(git rev-list -n 1 "refs/tags/${TAG}")"
+          if [ -z "$SHA" ]; then
+            echo "::error::Could not resolve tag '$TAG' to a commit."
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Resolved $TAG to $SHA."
+
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -41,11 +84,7 @@ jobs:
       - name: Resolve tag → version + verify pyproject.toml match
         id: ver
         run: |
-          if [ -n "${{ inputs.tag }}" ]; then
-            TAG="${{ inputs.tag }}"
-          else
-            TAG="${GITHUB_REF_NAME}"
-          fi
+          TAG="${{ steps.release.outputs.tag }}"
           VERSION="${TAG#v}"
 
           PYPROJECT_VERSION=$(grep -E '^version = ' pyproject.toml | sed -E 's/version = "(.+)"/\1/')
