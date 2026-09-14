@@ -1,0 +1,130 @@
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and publish (e.g., v0.1.0) — must already exist"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish to PyPI + GitHub Release
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/harlequin-chdb/
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        id: release
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+
+          case "$TAG" in
+            v[0-9]*)
+              ;;
+            *)
+              echo "::error::Release tag must start with 'v' followed by a version, got '$TAG'."
+              exit 1
+              ;;
+          esac
+
+          case "$TAG" in
+            *[!A-Za-z0-9._-]*)
+              echo "::error::Release tag '$TAG' contains unsupported characters."
+              exit 1
+              ;;
+          esac
+
+          git fetch --force --tags origin "refs/tags/${TAG}:refs/tags/${TAG}"
+          SHA="$(git rev-list -n 1 "refs/tags/${TAG}")"
+          if [ -z "$SHA" ]; then
+            echo "::error::Could not resolve tag '$TAG' to a commit."
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Resolved $TAG to $SHA."
+
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Resolve tag → version + verify pyproject.toml match
+        id: ver
+        run: |
+          TAG="${{ steps.release.outputs.tag }}"
+          VERSION="${TAG#v}"
+
+          PYPROJECT_VERSION=$(grep -E '^version = ' pyproject.toml | sed -E 's/version = "(.+)"/\1/')
+          if [ "$VERSION" != "$PYPROJECT_VERSION" ]; then
+            echo "::error::Tag version '$VERSION' does not match pyproject.toml version '$PYPROJECT_VERSION'. Refusing to publish."
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Tag '$TAG' (version $VERSION) matches pyproject.toml. Proceeding."
+
+      - name: Build wheel + sdist
+        run: uv build
+
+      - name: Validate distributions
+        run: uvx twine check dist/*
+
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: uvx twine upload --skip-existing dist/*
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          VERSION="${{ steps.ver.outputs.version }}"
+
+          if ! gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "${{ github.repository }}" \
+              --title "$TAG" \
+              --notes "Initial release — see [CHANGELOG.md](./CHANGELOG.md) for the v${VERSION} entry. Published to https://pypi.org/project/harlequin-chdb/${VERSION}/."
+          fi
+
+          gh release upload "$TAG" dist/* \
+            --repo "${{ github.repository }}" \
+            --clobber
