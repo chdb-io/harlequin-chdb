@@ -109,7 +109,7 @@ jobs:
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
-        run: uvx twine upload dist/*
+        run: uvx twine upload --skip-existing dist/*
 
       - name: Create or update GitHub Release
         env:
