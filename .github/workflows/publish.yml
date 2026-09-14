@@ -1,27 +1,5 @@
 name: Publish
 
-# Tag-triggered release flow:
-#
-#   git tag v0.1.0 && git push origin v0.1.0
-#     ↓
-#   workflow runs: build → twine check → twine upload → gh release upload
-#     ↓
-#   pip install harlequin-chdb==0.1.0 works globally
-#
-# Modeled on chdb-io/chdb-sqlalchemy's PyPI workflow. This package is a
-# pure-Python universal wheel, so there is no OS/architecture wheel matrix.
-#
-# One-time external setup required before this workflow will succeed:
-#
-# 1. Create a PyPI API token scoped to the harlequin-chdb project at
-#    https://pypi.org/manage/account/token/
-# 2. Add it as repo secret PYPI_API_TOKEN at
-#    https://github.com/chdb-io/harlequin-chdb/settings/secrets/actions/new
-# 3. (Optional but recommended) Create environment "pypi" at
-#    https://github.com/chdb-io/harlequin-chdb/settings/environments
-#    and attach a protection rule (required reviewer). This gives one
-#    manual approve-click between tag push and PyPI upload.
-
 on:
   push:
     tags: ["v*"]
@@ -89,7 +67,7 @@ jobs:
       - name: Publish to PyPI
         env:
           TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
         run: uvx twine upload dist/*
 
       - name: Create or update GitHub Release

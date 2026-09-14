@@ -45,9 +45,10 @@ python -m build
 ## Releases
 
 Releases are published from version tags. For example, `v0.1.0` builds the
-wheel and source distribution, validates them with Twine, uploads them to PyPI
-with the `PYPI_API_TOKEN` repository secret, and attaches the artifacts to the
-matching GitHub Release.
+wheel and source distribution, validates them with Twine, uploads them to
+PyPI, and attaches the artifacts to the matching GitHub Release.
+
+See [Architecture](docs/architecture.md) for the adapter design and data path.
 
 ## Usage
 
