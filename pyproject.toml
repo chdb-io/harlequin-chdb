@@ -1,0 +1,67 @@
+[project]
+name = "harlequin-chdb"
+version = "0.1.0"
+description = "A Harlequin adapter for chDB, the in-process ClickHouse engine."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    { name = "chDB Team", email = "auxten@clickhouse.com" },
+]
+keywords = ["harlequin", "chdb", "clickhouse", "sql", "arrow"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Database",
+]
+dependencies = [
+    "harlequin>=2.13,<3",
+    "chdb[adbc]>=4.4.0",
+    "chdb-core>=26.7.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build",
+    "pytest>=8",
+    "ruff",
+]
+
+[project.entry-points."harlequin.adapter"]
+chdb = "harlequin_chdb:HarlequinChdbAdapter"
+
+[project.urls]
+Homepage = "https://clickhouse.com/chdb"
+Documentation = "https://clickhouse.com/docs/chdb"
+Repository = "https://github.com/chdb-io/harlequin-chdb"
+Issues = "https://github.com/chdb-io/harlequin-chdb/issues"
+
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
