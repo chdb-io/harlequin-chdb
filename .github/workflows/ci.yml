@@ -6,6 +6,8 @@ on:
   pull_request:
     branches: ["main"]
   workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * 1"
 
 permissions:
   contents: read
@@ -65,4 +67,59 @@ jobs:
           from harlequin_chdb import HarlequinChdbAdapter
 
           assert HarlequinChdbAdapter.__name__ == "HarlequinChdbAdapter"
+          PY
+
+  hsql:
+    name: hsql (${{ matrix.label }})
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: minimum
+            harlequin: "harlequin==2.13.*"
+          - label: latest
+            harlequin: "harlequin<3"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package and selected Harlequin version
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]" "${{ matrix.harlequin }}"
+
+      - name: Check adapter discovery and capabilities
+        run: |
+          hsql --info -a chdb > /tmp/harlequin-chdb-info.json
+          python - <<'PY'
+          import json
+
+          with open("/tmp/harlequin-chdb-info.json") as file:
+              info = json.load(file)
+
+          adapter = info["adapters"]["chdb"]
+          assert adapter["distribution"] == "harlequin-chdb"
+          assert adapter["capabilities"] == {
+              "implements_cancel": True,
+              "implements_catalog_search": True,
+              "implements_read_only": True,
+              "implements_validate_sql": False,
+          }
+          PY
+
+      - name: Execute a query through hsql
+        run: |
+          hsql -a chdb -c "SELECT 1 AS value" --format json > /tmp/harlequin-chdb-query.json
+          python - <<'PY'
+          import json
+
+          with open("/tmp/harlequin-chdb-query.json") as file:
+              assert json.load(file) == [{"value": 1}]
           PY
